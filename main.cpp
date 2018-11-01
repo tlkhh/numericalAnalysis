@@ -1,11 +1,12 @@
-//#include<opencv2\core.hpp>
-//#include<opencv2\highgui.hpp>
+#include<opencv2\core.hpp>
+#include<opencv2\highgui.hpp>
 #include <iostream>
 #include <fstream>
 #include <iomanip>
 #include <LinearEquations.h>
+#include <interpolation.h>
 
-//using namespace cv;
+using namespace cv;
 using namespace std;
 
 double* readTraitFile(string filename, int TraitNum){
@@ -19,10 +20,10 @@ double* readTraitFile(string filename, int TraitNum){
 	return traitPoint;
 }
 double Ur(int x1, int y1, int x2, int y2) {
-	double rSquare = (x1-x2)*(x1-x2) + (y1-y2)*(y1-y2);
+	double rSquare = (x1 - x2)*(x1 - x2) + (y1 - y2)*(y1 - y2);
 	return rSquare * log(rSquare);
 }
-double* constructMatrixL(double* original, double* transfer, int TraitNum) {
+double* constructMatrixL(const double* original, int TraitNum) {
 	double* L = new double[(TraitNum+3)*(TraitNum+3)]();
 	int rows = TraitNum + 3;
 	//cout << TraitNum<<endl;
@@ -57,28 +58,62 @@ double* constructMatrixL(double* original, double* transfer, int TraitNum) {
 
 
 }
-/*
-double* transfermation(double x, double y, double* solution1, double* solution2, int n) {
-	//solution为Lx = Y方程的解，形式为【w1~n,a1,ax,ay】solution1是第一个维度，solution2是第二个维度
-	//返回值为{fx,fy}
-	double fx = solution1[n-3]+solution1[n-2]*x +solution1[n-1]*y+
-}*/
-
+void constructY(const double*transfer, int traitNum, double* Y1, double* Y2) {
+	//Y1获得特征点的X坐标
+	for (int i = 0; i < traitNum; i++) {
+		Y1[i] = transfer[2*i];
+	}
+	//Y2获得特征点的Y坐标
+	for (int i = 0; i < traitNum; i++) {
+		Y2[i] = transfer[2*i+1];
+	}
+	//补0
+	for (int i = traitNum; i < traitNum + 3; i++) {
+		Y1[i] = Y2[i] = 0;
+	}
+}
+void showImage(Mat image,string imageName) {
+	namedWindow(imageName, CV_WINDOW_AUTOSIZE);
+	imshow(imageName, image);
+	waitKey(0);
+	destroyWindow(imageName);
+}
 int main()
 {
-		double* testA = new double[16]{ 5,0,4,2,1,-1,2,1,4,1,2,0,1,1,1,1 };
-		double* testB = new double[4]{ 3,1,1,0 };
-		LinearEquations LE(4, testA, testB);
-		LE.printC();
+	Mat oldImage = imread("1.jpg", CV_LOAD_IMAGE_UNCHANGED);
+	showImage(oldImage, "oldImage");
+	cout << oldImage.cols << ends << oldImage.rows<<"   --------------"<<endl;
+	Mat Image2 = imread("2.jpg", CV_LOAD_IMAGE_UNCHANGED);
+	Image2.resize(500, 800);                                                          //貌似要自己写resize
+	showImage(Image2, "Image2");
+	cout <<Image2.cols << ends << Image2.rows<< "   --------------"<<endl;
+	//original:1, transfer:2
+	int traitNum = 68;
+	double* original = readTraitFile("1.txt",traitNum);
+	double* transfer = readTraitFile("2.txt",traitNum);
+	double* L = constructMatrixL(original, traitNum);
+	double* Y1 = new double[traitNum + 3];
+	double* Y2 = new double[traitNum + 3];
+	constructY(transfer, traitNum, Y1, Y2);
+	LinearEquations LE(traitNum + 3, L,Y1,Y2);
+		//LE.printABC();
 		LE.elimination();
-		double* solution = NULL;
-		solution = LE.lastStep();
-		for (int i = 0; i<4; i++) {
-			cout << solution[i] << endl;
+		//LE.printABC();
+		LE.lastStep();
+		for (int i = 0; i<71; i++) {
+			cout << LE.solutionB[i] << endl;
 	}
+		cout << "------c---" << endl;
+		for (int i = 0; i<71; i++) {
+			cout << LE.solutionC[i] << endl;
+		}
+		//插值
+		Interpolation inter(LE.solutionB, LE.solutionC,traitNum,original,Image2);
+		inter.transfer();
+		showImage(inter.newImage, "newImage");
 
 	getchar();
-	system("pause");
+	//system("pause");
 	return 0;
 	//读取特征点文件，表示为某种数据结构？
 	    //构建K.P.=>L Y
